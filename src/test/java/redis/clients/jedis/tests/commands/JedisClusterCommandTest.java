@@ -73,25 +73,26 @@ public class JedisClusterCommandTest {
   }
 
   @Test
-  public void runReconnectWithRandomConnection() {
+  public void runAlwaysFailing() {
     JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
-    // simulate failing connection
-    when(connectionHandler.getConnectionFromSlot(anyInt())).thenReturn(null);
-    // simulate good connection
-    when(connectionHandler.getConnection()).thenReturn(mock(Jedis.class));
 
-    JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
+    JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 3) {
       @Override
       public String execute(Jedis connection) {
-        if (connection == null) {
-          throw new JedisConnectionException("");
-        }
-        return "foo";
+        throw new JedisConnectionException("Connection failed");
       }
     };
 
-    String actual = testMe.run("");
-    assertEquals("foo", actual);
+    try {
+      testMe.run("");
+      fail("cluster command did not fail");
+    } catch (JedisClusterMaxAttemptsException e) {
+      // expected
+    }
+    InOrder inOrder = inOrder(connectionHandler);
+    inOrder.verify(connectionHandler, times(3)).getConnectionFromSlot(anyInt());
+    inOrder.verify(connectionHandler).renewSlotCache();
+    inOrder.verifyNoMoreInteractions();
   }
 
   @Test
