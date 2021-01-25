@@ -4,7 +4,6 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 import org.mockito.InOrder;
-import org.mockito.Mock;
 import org.mockito.Mockito;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.Jedis;
@@ -180,13 +179,14 @@ public class JedisClusterCommandTest {
     Mockito.when(fromGetConnection.toString()).thenReturn("getConnection");
     Mockito.when(connectionHandler.getConnection()).thenReturn(fromGetConnection);
 
+    final HostAndPort movedTarget = new HostAndPort(null, 0);
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
       @Override
       public String execute(Jedis connection) {
         String source = connection.toString();
         if ("getConnectionFromSlot".equals(source)) {
           // First attempt, report moved
-          throw new JedisMovedDataException("Moved", null, 0);
+          throw new JedisMovedDataException("Moved", movedTarget, 0);
         }
 
         if ("getConnectionFromNode".equals(source)) {
@@ -202,6 +202,11 @@ public class JedisClusterCommandTest {
 
     String actual = testMe.run("");
     assertEquals("foo", actual);
+    InOrder inOrder = Mockito.inOrder(connectionHandler);
+    inOrder.verify(connectionHandler).getConnectionFromSlot(Mockito.anyInt());
+    inOrder.verify(connectionHandler).renewSlotCache(fromGetConnectionFromSlot);
+    inOrder.verify(connectionHandler).getConnectionFromNode(movedTarget);
+    inOrder.verify(connectionHandler).getConnection();
   }
 
   @Test(expected = JedisNoReachableClusterNodeException.class)
