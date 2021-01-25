@@ -1,10 +1,14 @@
 package redis.clients.jedis.tests.commands;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import org.junit.Test;
 import org.mockito.InOrder;
-import org.mockito.Mockito;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisClusterCommand;
@@ -32,8 +36,7 @@ public class JedisClusterCommandTest {
 
   @Test
   public void runSuccessfulExecute() {
-    JedisClusterConnectionHandler connectionHandler = Mockito
-        .mock(JedisClusterConnectionHandler.class);
+    JedisClusterConnectionHandler connectionHandler = mock(JedisClusterConnectionHandler.class);
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
       @Override
       public String execute(Jedis connection) {
@@ -46,8 +49,7 @@ public class JedisClusterCommandTest {
 
   @Test
   public void runFailOnFirstExecSuccessOnSecondExec() {
-    JedisClusterConnectionHandler connectionHandler = Mockito
-        .mock(JedisClusterConnectionHandler.class);
+    JedisClusterConnectionHandler connectionHandler = mock(JedisClusterConnectionHandler.class);
 
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
       boolean isFirstCall = true;
@@ -69,12 +71,11 @@ public class JedisClusterCommandTest {
 
   @Test
   public void runReconnectWithRandomConnection() {
-    JedisSlotBasedConnectionHandler connectionHandler = Mockito
-        .mock(JedisSlotBasedConnectionHandler.class);
+    JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
     // simulate failing connection
-    Mockito.when(connectionHandler.getConnectionFromSlot(Mockito.anyInt())).thenReturn(null);
+    when(connectionHandler.getConnectionFromSlot(anyInt())).thenReturn(null);
     // simulate good connection
-    Mockito.when(connectionHandler.getConnection()).thenReturn(Mockito.mock(Jedis.class));
+    when(connectionHandler.getConnection()).thenReturn(mock(Jedis.class));
 
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
       @Override
@@ -92,8 +93,7 @@ public class JedisClusterCommandTest {
 
   @Test
   public void runMovedSuccess() {
-    JedisSlotBasedConnectionHandler connectionHandler = Mockito
-        .mock(JedisSlotBasedConnectionHandler.class);
+    JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
 
     final HostAndPort movedTarget = new HostAndPort(null, 0);
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
@@ -115,19 +115,18 @@ public class JedisClusterCommandTest {
     String actual = testMe.run("");
     assertEquals("foo", actual);
 
-    InOrder inOrder = Mockito.inOrder(connectionHandler);
-    inOrder.verify(connectionHandler).getConnectionFromSlot(Mockito.anyInt());
-    inOrder.verify(connectionHandler).renewSlotCache(Mockito.<Jedis> any());
+    InOrder inOrder = inOrder(connectionHandler);
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
+    inOrder.verify(connectionHandler).renewSlotCache(any(Jedis.class));
     inOrder.verify(connectionHandler).getConnectionFromNode(movedTarget);
   }
 
   @Test
   public void runAskSuccess() {
-    JedisSlotBasedConnectionHandler connectionHandler = Mockito
-        .mock(JedisSlotBasedConnectionHandler.class);
-    Jedis jedis = Mockito.mock(Jedis.class);
+    JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
+    Jedis jedis = mock(Jedis.class);
     final HostAndPort askTarget = new HostAndPort(null, 0);
-    Mockito.when(connectionHandler.getConnectionFromNode(askTarget)).thenReturn(jedis);
+    when(connectionHandler.getConnectionFromNode(askTarget)).thenReturn(jedis);
 
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
       boolean isFirstCall = true;
@@ -148,8 +147,8 @@ public class JedisClusterCommandTest {
     String actual = testMe.run("");
     assertEquals("foo", actual);
 
-    InOrder inOrder = Mockito.inOrder(connectionHandler, jedis);
-    inOrder.verify(connectionHandler).getConnectionFromSlot(Mockito.anyInt());
+    InOrder inOrder = inOrder(connectionHandler, jedis);
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
     inOrder.verify(connectionHandler).getConnectionFromNode(askTarget);
     inOrder.verify(jedis).asking();
   }
@@ -162,22 +161,20 @@ public class JedisClusterCommandTest {
     // In response to that, runWithTimeout() requests a random node using
     // connectionHandler.getConnection()
     // Third attempt works
-    JedisSlotBasedConnectionHandler connectionHandler = Mockito
-        .mock(JedisSlotBasedConnectionHandler.class);
+    JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
 
-    Jedis fromGetConnectionFromSlot = Mockito.mock(Jedis.class);
-    Mockito.when(fromGetConnectionFromSlot.toString()).thenReturn("getConnectionFromSlot");
-    Mockito.when(connectionHandler.getConnectionFromSlot(Mockito.anyInt())).thenReturn(
-      fromGetConnectionFromSlot);
+    Jedis fromGetConnectionFromSlot = mock(Jedis.class);
+    when(fromGetConnectionFromSlot.toString()).thenReturn("getConnectionFromSlot");
+    when(connectionHandler.getConnectionFromSlot(anyInt())).thenReturn(fromGetConnectionFromSlot);
 
-    Jedis fromGetConnectionFromNode = Mockito.mock(Jedis.class);
-    Mockito.when(fromGetConnectionFromNode.toString()).thenReturn("getConnectionFromNode");
-    Mockito.when(connectionHandler.getConnectionFromNode(Mockito.<HostAndPort> any())).thenReturn(
+    Jedis fromGetConnectionFromNode = mock(Jedis.class);
+    when(fromGetConnectionFromNode.toString()).thenReturn("getConnectionFromNode");
+    when(connectionHandler.getConnectionFromNode(any(HostAndPort.class))).thenReturn(
       fromGetConnectionFromNode);
 
-    Jedis fromGetConnection = Mockito.mock(Jedis.class);
-    Mockito.when(fromGetConnection.toString()).thenReturn("getConnection");
-    Mockito.when(connectionHandler.getConnection()).thenReturn(fromGetConnection);
+    Jedis fromGetConnection = mock(Jedis.class);
+    when(fromGetConnection.toString()).thenReturn("getConnection");
+    when(connectionHandler.getConnection()).thenReturn(fromGetConnection);
 
     final HostAndPort movedTarget = new HostAndPort(null, 0);
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
@@ -202,8 +199,8 @@ public class JedisClusterCommandTest {
 
     String actual = testMe.run("");
     assertEquals("foo", actual);
-    InOrder inOrder = Mockito.inOrder(connectionHandler);
-    inOrder.verify(connectionHandler).getConnectionFromSlot(Mockito.anyInt());
+    InOrder inOrder = inOrder(connectionHandler);
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
     inOrder.verify(connectionHandler).renewSlotCache(fromGetConnectionFromSlot);
     inOrder.verify(connectionHandler).getConnectionFromNode(movedTarget);
     inOrder.verify(connectionHandler).getConnection();
@@ -211,9 +208,8 @@ public class JedisClusterCommandTest {
 
   @Test(expected = JedisNoReachableClusterNodeException.class)
   public void runRethrowsJedisNoReachableClusterNodeException() {
-    JedisSlotBasedConnectionHandler connectionHandler = Mockito
-        .mock(JedisSlotBasedConnectionHandler.class);
-    Mockito.when(connectionHandler.getConnectionFromSlot(Mockito.anyInt())).thenThrow(
+    JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
+    when(connectionHandler.getConnectionFromSlot(anyInt())).thenThrow(
       JedisNoReachableClusterNodeException.class);
 
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
