@@ -127,8 +127,8 @@ public class JedisClusterCommandTest {
     JedisSlotBasedConnectionHandler connectionHandler = Mockito
         .mock(JedisSlotBasedConnectionHandler.class);
     Jedis jedis = Mockito.mock(Jedis.class);
-    Mockito.when(connectionHandler.getConnectionFromNode(Mockito.<HostAndPort> any())).thenReturn(
-      jedis);
+    final HostAndPort askTarget = new HostAndPort(null, 0);
+    Mockito.when(connectionHandler.getConnectionFromNode(askTarget)).thenReturn(jedis);
 
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
       boolean isFirstCall = true;
@@ -139,7 +139,7 @@ public class JedisClusterCommandTest {
           isFirstCall = false;
 
           // Slot 0 moved
-          throw new JedisAskDataException("", null, 0);
+          throw new JedisAskDataException("", askTarget, 0);
         }
 
         return "foo";
@@ -148,7 +148,11 @@ public class JedisClusterCommandTest {
 
     String actual = testMe.run("");
     assertEquals("foo", actual);
-    Mockito.verify(jedis).asking();
+
+    InOrder inOrder = Mockito.inOrder(connectionHandler, jedis);
+    inOrder.verify(connectionHandler).getConnectionFromSlot(Mockito.anyInt());
+    inOrder.verify(connectionHandler).getConnectionFromNode(askTarget);
+    inOrder.verify(jedis).asking();
   }
 
   @Test
