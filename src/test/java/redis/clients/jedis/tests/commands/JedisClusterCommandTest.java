@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import org.junit.Test;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.Jedis;
@@ -117,7 +118,7 @@ public class JedisClusterCommandTest {
 
     InOrder inOrder = inOrder(connectionHandler);
     inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
-    inOrder.verify(connectionHandler).renewSlotCache(any(Jedis.class));
+    inOrder.verify(connectionHandler).renewSlotCache(ArgumentMatchers.<Jedis>any());
     inOrder.verify(connectionHandler).getConnectionFromNode(movedTarget);
   }
 
