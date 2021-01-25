@@ -1,10 +1,12 @@
 package redis.clients.jedis.tests.commands;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import org.junit.Test;
@@ -155,56 +157,51 @@ public class JedisClusterCommandTest {
   }
 
   @Test
-  public void runMovedFailSuccess() {
+  public void runMovedAndFailing() {
     // Test:
     // First attempt is a JedisMovedDataException() move, because we asked the wrong node
     // Second attempt is a JedisConnectionException, because this node is down
-    // In response to that, runWithTimeout() requests a random node using
-    // connectionHandler.getConnection()
-    // Third attempt works
+    // In response to that, runWithTimeout() retires the same node again forever, see verifications
+    // at the bottom of the test
     JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
 
-    Jedis fromGetConnectionFromSlot = mock(Jedis.class);
-    when(fromGetConnectionFromSlot.toString()).thenReturn("getConnectionFromSlot");
+    final Jedis fromGetConnectionFromSlot = mock(Jedis.class);
     when(connectionHandler.getConnectionFromSlot(anyInt())).thenReturn(fromGetConnectionFromSlot);
 
-    Jedis fromGetConnectionFromNode = mock(Jedis.class);
-    when(fromGetConnectionFromNode.toString()).thenReturn("getConnectionFromNode");
+    final Jedis fromGetConnectionFromNode = mock(Jedis.class);
     when(connectionHandler.getConnectionFromNode(any(HostAndPort.class))).thenReturn(
       fromGetConnectionFromNode);
 
-    Jedis fromGetConnection = mock(Jedis.class);
-    when(fromGetConnection.toString()).thenReturn("getConnection");
-    when(connectionHandler.getConnection()).thenReturn(fromGetConnection);
-
     final HostAndPort movedTarget = new HostAndPort(null, 0);
-    JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
+    JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 3) {
       @Override
       public String execute(Jedis connection) {
-        String source = connection.toString();
-        if ("getConnectionFromSlot".equals(source)) {
+        if (fromGetConnectionFromSlot == connection) {
           // First attempt, report moved
           throw new JedisMovedDataException("Moved", movedTarget, 0);
         }
 
-        if ("getConnectionFromNode".equals(source)) {
+        if (fromGetConnectionFromNode == connection) {
           // Second attempt in response to the move, report failure
           throw new JedisConnectionException("Connection failed");
         }
 
-        // This is the third and last case we handle
-        assert "getConnection".equals(source);
-        return "foo";
+        throw new IllegalStateException("Should have thrown jedis exception");
       }
     };
 
-    String actual = testMe.run("");
-    assertEquals("foo", actual);
+    try {
+      testMe.run("");
+      fail("cluster command did not fail");
+    } catch (JedisClusterMaxAttemptsException e) {
+      // expected
+    }
     InOrder inOrder = inOrder(connectionHandler);
     inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
     inOrder.verify(connectionHandler).renewSlotCache(fromGetConnectionFromSlot);
-    inOrder.verify(connectionHandler).getConnectionFromNode(movedTarget);
-    inOrder.verify(connectionHandler).getConnection();
+    inOrder.verify(connectionHandler, times(2)).getConnectionFromNode(movedTarget);
+    inOrder.verify(connectionHandler).renewSlotCache();
+    inOrder.verifyNoMoreInteractions();
   }
 
   @Test(expected = JedisNoReachableClusterNodeException.class)
