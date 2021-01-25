@@ -3,6 +3,8 @@ package redis.clients.jedis.tests.commands;
 import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
+import org.mockito.InOrder;
+import org.mockito.Mock;
 import org.mockito.Mockito;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.Jedis;
@@ -91,9 +93,10 @@ public class JedisClusterCommandTest {
 
   @Test
   public void runMovedSuccess() {
-    JedisClusterConnectionHandler connectionHandler = Mockito
-        .mock(JedisClusterConnectionHandler.class);
+    JedisSlotBasedConnectionHandler connectionHandler = Mockito
+        .mock(JedisSlotBasedConnectionHandler.class);
 
+    final HostAndPort movedTarget = new HostAndPort(null, 0);
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 10) {
       boolean isFirstCall = true;
 
@@ -103,7 +106,7 @@ public class JedisClusterCommandTest {
           isFirstCall = false;
 
           // Slot 0 moved
-          throw new JedisMovedDataException("", null, 0);
+          throw new JedisMovedDataException("", movedTarget, 0);
         }
 
         return "foo";
@@ -113,7 +116,10 @@ public class JedisClusterCommandTest {
     String actual = testMe.run("");
     assertEquals("foo", actual);
 
-    Mockito.verify(connectionHandler).renewSlotCache(Mockito.<Jedis> any());
+    InOrder inOrder = Mockito.inOrder(connectionHandler);
+    inOrder.verify(connectionHandler).getConnectionFromSlot(Mockito.anyInt());
+    inOrder.verify(connectionHandler).renewSlotCache(Mockito.<Jedis> any());
+    inOrder.verify(connectionHandler).getConnectionFromNode(movedTarget);
   }
 
   @Test
