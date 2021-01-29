@@ -129,7 +129,11 @@ public abstract class JedisClusterCommand<T> {
           redirectionSupplier = null;
         }
 
-        return execute(connection);
+        final T result = execute(connection);
+        if (currentAttempt > 0) {
+          LOG.info("Success after {} attempts", currentAttempt + 1);
+        }
+        return result;
       } catch (JedisNoReachableClusterNodeException e) {
         throw e;
       } catch (JedisConnectionException e) {
