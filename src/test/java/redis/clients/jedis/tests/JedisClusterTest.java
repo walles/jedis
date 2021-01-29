@@ -24,6 +24,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.pool2.PooledObject;
+import org.apache.commons.pool2.impl.EvictionConfig;
+import org.apache.commons.pool2.impl.EvictionPolicy;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -577,17 +580,23 @@ public class JedisClusterTest {
     jc.close();
   }
 
-  @Test(timeout = DEFAULT_TIMEOUT)
+  @Test()
   public void testReturnConnectionOnJedisConnectionException() throws InterruptedException {
     Set<HostAndPort> jedisClusterNode = new HashSet<HostAndPort>();
     jedisClusterNode.add(new HostAndPort("127.0.0.1", 7379));
     JedisPoolConfig config = new JedisPoolConfig();
     config.setMaxTotal(1);
+    config.setTestOnCreate(false);
+    config.setTestOnBorrow(false);
+    config.setTestOnReturn(false);
+    config.setTestWhileIdle(false);
+    config.setEvictionPolicy((config1, underTest, idleCount) -> false);
 
     // Otherwise the test can time out before we are done
     int shorterThanTheTestTimeoutMs = DEFAULT_TIMEOUT / 2;
 
-    JedisCluster jc = new JedisCluster(jedisClusterNode, shorterThanTheTestTimeoutMs, shorterThanTheTestTimeoutMs,
+    JedisCluster jc = new JedisCluster(jedisClusterNode, shorterThanTheTestTimeoutMs,
+        shorterThanTheTestTimeoutMs,
         DEFAULT_REDIRECTIONS, "cluster", config);
 
     Jedis j = jc.getClusterNodes().get("127.0.0.1:7380").getResource();

@@ -180,9 +180,10 @@ class JedisFactory implements PooledObjectFactory<Jedis> {
       String connectionHost = jedis.getClient().getHost();
       int connectionPort = jedis.getClient().getPort();
 
+      final String pong = jedis.ping();
       return hostAndPort.getHost().equals(connectionHost)
           && hostAndPort.getPort() == connectionPort && jedis.isConnected()
-          && jedis.ping().equals("PONG");
+          && pong.equals("PONG");
     } catch (final Exception e) {
       return false;
     }
