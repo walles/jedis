@@ -2,16 +2,18 @@ package redis.clients.jedis.util;
 
 import java.io.Closeable;
 import java.util.NoSuchElementException;
-
 import org.apache.commons.pool2.PooledObjectFactory;
 import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisException;
 import redis.clients.jedis.exceptions.JedisExhaustedPoolException;
 
 public abstract class Pool<T> implements Closeable {
+  private static final Logger LOG = LoggerFactory.getLogger(Pool.class);
+
   protected GenericObjectPool<T> internalPool;
 
   /**
@@ -47,7 +49,11 @@ public abstract class Pool<T> implements Closeable {
 
   public T getResource() {
     try {
-      return internalPool.borrowObject();
+      LOG.debug("Borrowing objects, {}...", internalPool.listAllObjects());
+      T borrowedObject = internalPool.borrowObject(0);
+      LOG.debug("Borrowed object: {}", borrowedObject);
+      LOG.debug("List after borrowing: {}", internalPool.listAllObjects());
+      return borrowedObject;
     } catch (NoSuchElementException nse) {
       if (null == nse.getCause()) { // The exception was caused by an exhausted pool
         throw new JedisExhaustedPoolException(
@@ -65,6 +71,7 @@ public abstract class Pool<T> implements Closeable {
       return;
     }
     try {
+      LOG.debug("Returning object: {}", resource);
       internalPool.returnObject(resource);
     } catch (Exception e) {
       throw new JedisException("Could not return the resource to the pool", e);
@@ -89,6 +96,7 @@ public abstract class Pool<T> implements Closeable {
 
   protected void returnBrokenResourceObject(final T resource) {
     try {
+      LOG.debug("Invalidating object: {}", resource);
       internalPool.invalidateObject(resource);
     } catch (Exception e) {
       throw new JedisException("Could not return the broken resource to the pool", e);
@@ -182,6 +190,7 @@ public abstract class Pool<T> implements Closeable {
   public void addObjects(int count) {
     try {
       for (int i = 0; i < count; i++) {
+        LOG.debug("Adding object to pool");
         this.internalPool.addObject();
       }
     } catch (Exception e) {
