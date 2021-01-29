@@ -3601,6 +3601,13 @@ public class Jedis extends BinaryJedis implements JedisCommands, MultiKeyCommand
   }
 
   @Override
+  public String toString() {
+    return "Jedis{" +
+        "dataSource=" + dataSource +
+        '}';
+  }
+
+  @Override
   public void close() {
     if (dataSource != null) {
       JedisPoolAbstract pool = this.dataSource;
