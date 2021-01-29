@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.net.ssl.HostnameVerifier;
@@ -285,7 +286,7 @@ public class JedisClusterInfoCache {
     r.lock();
     try {
       List<JedisPool> pools = new ArrayList<>(nodes.values());
-      Collections.shuffle(pools);
+      Collections.shuffle(pools, new Random(1337L)); // 1337L = always red, 1338L = always green
       return pools;
     } finally {
       r.unlock();
