@@ -101,8 +101,8 @@ public abstract class JedisClusterCommand<T> {
     }
 
     long millisLeft = Duration.between(Instant.now(), deadline).toMillis();
-    if (millisLeft <= 0) {
-      return 0;
+    if (millisLeft < 0) {
+      throw new JedisClusterMaxAttemptsException("Deadline exceeded");
     }
 
     return millisLeft / (attemptsLeft * attemptsLeft);

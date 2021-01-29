@@ -222,7 +222,7 @@ public class JedisClusterCommandTest {
     final LongConsumer sleep = mock(LongConsumer.class);
     final HostAndPort movedTarget = new HostAndPort(null, 0);
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 3,
-        Duration.ZERO) {
+        Duration.ofSeconds(1)) {
       @Override
       public String execute(Jedis connection) {
         if (redirecter == connection) {
@@ -281,5 +281,41 @@ public class JedisClusterCommandTest {
     };
 
     testMe.run("");
+  }
+
+  @Test
+  public void runStopsRetryingAfterTimeout() {
+    JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
+
+    final LongConsumer sleep = mock(LongConsumer.class);
+    JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 3,
+        Duration.ZERO) {
+      @Override
+      public String execute(Jedis connection) {
+        try {
+          // exceed deadline
+          Thread.sleep(100L);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+        throw new JedisConnectionException("Connection failed");
+      }
+
+      @Override
+      protected void sleep(long sleepMillis) {
+        sleep.accept(sleepMillis);
+      }
+    };
+
+    try {
+      testMe.run("");
+      fail("cluster command did not fail");
+    } catch (JedisClusterMaxAttemptsException e) {
+      // expected
+    }
+    InOrder inOrder = inOrder(connectionHandler, sleep);
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
+    inOrder.verify(connectionHandler).renewSlotCache();
+    inOrder.verifyNoMoreInteractions();
   }
 }
