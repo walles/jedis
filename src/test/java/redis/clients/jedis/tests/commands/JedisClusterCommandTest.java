@@ -318,4 +318,40 @@ public class JedisClusterCommandTest {
     inOrder.verify(connectionHandler).renewSlotCache();
     inOrder.verifyNoMoreInteractions();
   }
+
+  @Test
+  public void runClosesConnectionBeforeRenewingSlotsCache() {
+    JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
+
+    Jedis connection = mock(Jedis.class);
+    when(connectionHandler.getConnectionFromSlot(anyInt())).thenReturn(connection);
+
+    JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 1, Duration.ZERO) {
+      @Override
+      public String execute(Jedis connection) {
+        throw new JedisConnectionException("Connection failure");
+      }
+    };
+
+    try {
+      testMe.run("");
+      fail("Didn't get the expected exception");
+    } catch (JedisClusterMaxAttemptsException e) {
+      // Expected case, do nothing
+    }
+
+    InOrder inOrder = inOrder(connectionHandler, connection);
+    // Must close connection before renewing slot cache, otherwise
+    // JedisClusterTest.testReturnConnectionOnJedisClusterConnection
+    // will start failing intermittently.
+    inOrder.verify(connection).close();
+    inOrder.verify(connectionHandler).renewSlotCache();
+
+    // This one is because of a finally block, and isn't needed but doesn't hurt.
+    // If you rewrite the code so this close() call goes away, fell free to
+    // update this test as well to match!
+    inOrder.verify(connection).close();
+
+    inOrder.verifyNoMoreInteractions();
+  }
 }
