@@ -604,6 +604,8 @@ public class JedisClusterTest {
     ClientKillerUtil.killClient(j, "DEAD");
     j.close();
 
+    System.out.println("\nTest setup done!\n");
+
     jc.get("test");
   }
 

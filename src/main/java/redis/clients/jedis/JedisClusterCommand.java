@@ -140,7 +140,7 @@ public abstract class JedisClusterCommand<T> {
         LOG.warn("Failed connecting to Redis: {}", connection, e);
         // "- 1" because we just did one, but the currentAttempt counter hasn't increased yet
         int attemptsLeft = maxAttempts - currentAttempt - 1;
-        connectionSupplier = handleConnectionProblem(slot, attemptsLeft, deadline);
+        connectionSupplier = handleConnectionProblem(connection, slot, attemptsLeft, deadline);
       } catch (JedisRedirectionException e) {
         redirectionSupplier = handleRedirection(connection, e);
       } finally {
@@ -162,7 +162,7 @@ public abstract class JedisClusterCommand<T> {
     }
   }
 
-  private Supplier<Jedis> handleConnectionProblem(final int slot, int attemptsLeft,
+  private Supplier<Jedis> handleConnectionProblem(Jedis failedConnection, final int slot, int attemptsLeft,
       Instant doneDeadline) {
     if (!shouldBackOff(attemptsLeft)) {
       return () -> {
@@ -171,6 +171,11 @@ public abstract class JedisClusterCommand<T> {
         return connection;
       };
     }
+
+    // Must release current connection before renewing the slot cache below. If we fail to do this,
+    // then JedisClusterTest.testReturnConnectionOnJedisClusterConnection will start failing
+    // intermittently.
+    releaseConnection(failedConnection);
 
     //We need this because if node is not reachable anymore - we need to finally initiate slots
     //renewing, or we can stuck with cluster state without one node in opposite case.
