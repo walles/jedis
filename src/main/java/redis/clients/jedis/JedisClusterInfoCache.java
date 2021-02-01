@@ -286,6 +286,7 @@ public class JedisClusterInfoCache {
     r.lock();
     try {
       List<JedisPool> pools = new ArrayList<>(nodes.values());
+      // FIXME: DO NOT MERGE THE FOLLOWING LINE
       Collections.shuffle(pools, new Random(1337L)); // 1337L = always red, 1338L = always green
       return pools;
     } finally {

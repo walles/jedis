@@ -16,13 +16,18 @@ public abstract class Pool<T> implements Closeable {
 
   protected GenericObjectPool<T> internalPool;
 
+  private final int fixmeRemoveThisNumber;
+  private static int fixmeNextNumber = 1;
+
   /**
    * Using this constructor means you have to set and initialize the internalPool yourself.
    */
   public Pool() {
+    fixmeRemoveThisNumber = fixmeNextNumber++;
   }
 
   public Pool(final GenericObjectPoolConfig poolConfig, PooledObjectFactory<T> factory) {
+    fixmeRemoveThisNumber = fixmeNextNumber++;
     initPool(poolConfig, factory);
   }
 
@@ -37,12 +42,12 @@ public abstract class Pool<T> implements Closeable {
 
   public void initPool(final GenericObjectPoolConfig poolConfig, PooledObjectFactory<T> factory) {
 
-    LOG.debug("Initing new pool");
+    LOG.debug("{} Initing new pool", fixmeRemoveThisNumber);
     if (this.internalPool != null) {
       try {
         closeInternalPool();
       } catch (Exception e) {
-        LOG.error("Could not close internal pool", e);
+        LOG.error("{} Could not close internal pool", fixmeRemoveThisNumber, e);
       }
     }
 
@@ -51,12 +56,12 @@ public abstract class Pool<T> implements Closeable {
 
   public T getResource() {
     try {
-      LOG.debug("Borrowing objects, {}...", internalPool.listAllObjects());
-      LOG.debug("Before borrowing, idle List size: {}", internalPool.getNumIdle());
+      LOG.debug("{} Borrowing objects, {}...", fixmeRemoveThisNumber, internalPool.listAllObjects());
+      LOG.debug("{} Before borrowing, idle List size: {}", fixmeRemoveThisNumber, internalPool.getNumIdle());
       T borrowedObject = internalPool.borrowObject(0);
-      LOG.debug("Borrowed object: {}", borrowedObject);
-      LOG.debug("List after borrowing: {}", internalPool.listAllObjects());
-      LOG.debug("After borrowing, idle List size: {}", internalPool.getNumIdle());
+      LOG.debug("{} Borrowed object: {}", fixmeRemoveThisNumber, borrowedObject);
+      LOG.debug("{} List after borrowing: {}", fixmeRemoveThisNumber, internalPool.listAllObjects());
+      LOG.debug("{} After borrowing, idle List size: {}", fixmeRemoveThisNumber, internalPool.getNumIdle());
       return borrowedObject;
     } catch (NoSuchElementException nse) {
       if (null == nse.getCause()) { // The exception was caused by an exhausted pool
@@ -75,7 +80,7 @@ public abstract class Pool<T> implements Closeable {
       return;
     }
     try {
-      LOG.debug("Returning object to pool: {}", resource);
+      LOG.debug("{} Returning object to pool: {}", fixmeRemoveThisNumber, resource);
       internalPool.returnObject(resource);
     } catch (Exception e) {
       throw new JedisException("Could not return the resource to the pool", e);
@@ -100,7 +105,7 @@ public abstract class Pool<T> implements Closeable {
 
   protected void returnBrokenResourceObject(final T resource) {
     try {
-      LOG.debug("Invalidating object: {}", resource);
+      LOG.debug("{} Invalidating object: {}", fixmeRemoveThisNumber, resource);
       internalPool.invalidateObject(resource);
     } catch (Exception e) {
       throw new JedisException("Could not return the broken resource to the pool", e);
@@ -108,7 +113,7 @@ public abstract class Pool<T> implements Closeable {
   }
 
   protected void closeInternalPool() {
-    LOG.debug("Closing internal pool");
+    LOG.debug("{} Closing internal pool", fixmeRemoveThisNumber);
     try {
       internalPool.close();
     } catch (Exception e) {
@@ -195,7 +200,7 @@ public abstract class Pool<T> implements Closeable {
   public void addObjects(int count) {
     try {
       for (int i = 0; i < count; i++) {
-        LOG.debug("Adding object to pool");
+        LOG.debug("{} Adding object to pool", fixmeRemoveThisNumber);
         this.internalPool.addObject();
       }
     } catch (Exception e) {
