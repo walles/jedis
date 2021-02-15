@@ -5,9 +5,7 @@ import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import redis.clients.jedis.exceptions.JedisAskDataException;
-import redis.clients.jedis.exceptions.JedisClusterException;
 import redis.clients.jedis.exceptions.JedisClusterMaxAttemptsException;
 import redis.clients.jedis.exceptions.JedisClusterOperationException;
 import redis.clients.jedis.exceptions.JedisConnectionException;
@@ -105,7 +103,6 @@ public abstract class JedisClusterCommand<T> {
     Instant deadline = Instant.now().plus(maxTotalRetriesDuration);
 
     JedisRedirectionException redirect = null;
-    int consecutiveConnectionFailures = 0;
     for (int attemptsLeft = this.maxAttempts; attemptsLeft > 0; attemptsLeft--) {
       Jedis connection = null;
       try {
@@ -119,22 +116,25 @@ public abstract class JedisClusterCommand<T> {
           connection = connectionHandler.getConnectionFromSlot(slot);
         }
 
-        return execute(connection);
+        try {
+          return execute(connection);
+        } catch (JedisConnectionException e) {
+          LOG.debug("Connecting to {} failed once, shortcut retrying without backoff...", connection, e);
+          T result = execute(connection);
+          int doneAttempts = 1 + maxAttempts - attemptsLeft;
+          LOG.debug("Shortcut retry worked, returning result after {} attempts", doneAttempts);
+          return result;
+        }
 
       } catch (JedisNoReachableClusterNodeException jnrcne) {
         throw jnrcne;
       } catch (JedisConnectionException jce) {
-        ++consecutiveConnectionFailures;
         LOG.debug("Failed connecting to Redis: {}", connection, jce);
         // "- 1" because we just did one, but the attemptsLeft counter hasn't been decremented yet
-        boolean reset = handleConnectionProblem(attemptsLeft - 1, consecutiveConnectionFailures, deadline);
-        if (reset) {
-          consecutiveConnectionFailures = 0;
-          redirect = null;
-        }
+        handleConnectionProblem(attemptsLeft - 1, deadline);
+        redirect = null;
       } catch (JedisRedirectionException jre) {
         LOG.debug("Redirected by server to {}", jre.getTargetNode());
-        consecutiveConnectionFailures = 0;
         redirect = jre;
         // if MOVED redirection occurred,
         if (jre instanceof JedisMovedDataException) {
@@ -153,41 +153,14 @@ public abstract class JedisClusterCommand<T> {
     throw new JedisClusterMaxAttemptsException("No more cluster attempts left.");
   }
 
-  /**
-   * Related values should be reset if <code>TRUE</code> is returned.
-   *
-   * @param attemptsLeft
-   * @param consecutiveConnectionFailures
-   * @param doneDeadline
-   * @return true - if some actions are taken
-   * <br /> false - if no actions are taken
-   */
-  private boolean handleConnectionProblem(int attemptsLeft, int consecutiveConnectionFailures, Instant doneDeadline) {
-    if (this.maxAttempts < 3) {
-      // Since we only renew the slots cache after two consecutive connection
-      // failures (see consecutiveConnectionFailures above), we need to special
-      // case the situation where we max out after two or fewer attempts.
-      //
-      // Otherwise, on two or fewer max attempts, the slots cache would never be
-      // renewed.
-      if (attemptsLeft == 0) {
-        this.connectionHandler.renewSlotCache();
-        return true;
-      }
-      return false;
-    }
-
-    if (consecutiveConnectionFailures < 2) {
-      return false;
-    }
-
+  private void handleConnectionProblem(int attemptsLeft, Instant doneDeadline) {
     sleep(getBackoffSleepMillis(attemptsLeft, doneDeadline));
+
     //We need this because if node is not reachable anymore - we need to finally initiate slots
     //renewing, or we can stuck with cluster state without one node in opposite case.
     //TODO make tracking of successful/unsuccessful operations for node - do renewing only
     //if there were no successful responses from this node last few seconds
     this.connectionHandler.renewSlotCache();
-    return true;
   }
 
   private static long getBackoffSleepMillis(int attemptsLeft, Instant deadline) {

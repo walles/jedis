@@ -10,7 +10,6 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -26,7 +25,6 @@ import redis.clients.jedis.JedisClusterCommand;
 import redis.clients.jedis.JedisClusterConnectionHandler;
 import redis.clients.jedis.JedisSlotBasedConnectionHandler;
 import redis.clients.jedis.exceptions.JedisAskDataException;
-import redis.clients.jedis.exceptions.JedisClusterException;
 import redis.clients.jedis.exceptions.JedisClusterMaxAttemptsException;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisMovedDataException;
@@ -106,7 +104,7 @@ public class JedisClusterCommandTest {
 
     final LongConsumer sleep = mock(LongConsumer.class);
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 3,
-        ONE_SECOND) {
+        Duration.ofDays(5)) {
       @Override
       public String execute(Jedis connection) {
         throw new JedisConnectionException("Connection failed");
@@ -125,10 +123,19 @@ public class JedisClusterCommandTest {
       // expected
     }
     InOrder inOrder = inOrder(connectionHandler, sleep);
-    inOrder.verify(connectionHandler, times(2)).getConnectionFromSlot(anyInt());
+
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
     inOrder.verify(sleep).accept(anyLong());
     inOrder.verify(connectionHandler).renewSlotCache();
+
     inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
+    inOrder.verify(sleep).accept(anyLong());
+    inOrder.verify(connectionHandler).renewSlotCache();
+
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
+    inOrder.verify(sleep).accept(anyLong());
+    inOrder.verify(connectionHandler).renewSlotCache();
+
     inOrder.verifyNoMoreInteractions();
   }
 
@@ -214,14 +221,12 @@ public class JedisClusterCommandTest {
     // Test:
     // First attempt is a JedisMovedDataException() move, because we asked the wrong node.
     // All subsequent attempts are JedisConnectionExceptions, because all nodes are now down.
-    // In response to the JedisConnectionExceptions, run() retries random nodes until maxAttempts is
-    // reached.
     JedisSlotBasedConnectionHandler connectionHandler = mock(JedisSlotBasedConnectionHandler.class);
 
-    final Jedis redirecter = mock(Jedis.class);
+    final Jedis redirecter = mock(Jedis.class, "redirecter");
     when(connectionHandler.getConnectionFromSlot(anyInt())).thenReturn(redirecter);
 
-    final Jedis failer = mock(Jedis.class);
+    final Jedis failer = mock(Jedis.class, "failer");
     when(connectionHandler.getConnectionFromNode(any(HostAndPort.class))).thenReturn(failer);
     doAnswer((Answer) (InvocationOnMock invocation) -> {
       when(connectionHandler.getConnectionFromSlot(anyInt())).thenReturn(failer);
@@ -231,7 +236,7 @@ public class JedisClusterCommandTest {
     final LongConsumer sleep = mock(LongConsumer.class);
     final HostAndPort movedTarget = new HostAndPort(null, 0);
     JedisClusterCommand<String> testMe = new JedisClusterCommand<String>(connectionHandler, 5,
-        ONE_SECOND) {
+        Duration.ofDays(5)) {
       @Override
       public String execute(Jedis connection) {
         if (redirecter == connection) {
@@ -261,13 +266,24 @@ public class JedisClusterCommandTest {
     }
     InOrder inOrder = inOrder(connectionHandler, sleep);
     inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
-    inOrder.verify(connectionHandler).renewSlotCache(redirecter);
-    inOrder.verify(connectionHandler, times(2)).getConnectionFromNode(movedTarget);
+    inOrder.verify(connectionHandler).renewSlotCache(redirecter);  // Because of the MOVED response
+
+    inOrder.verify(connectionHandler).getConnectionFromNode(movedTarget);  // try MOVED target
     inOrder.verify(sleep).accept(anyLong());
     inOrder.verify(connectionHandler).renewSlotCache();
-    inOrder.verify(connectionHandler, times(2)).getConnectionFromSlot(anyInt());
-    inOrder.verify(sleep).accept(anyLong());
+
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
+    inOrder.verify(sleep).accept(anyLong());  // Backing off because of the connection failure
     inOrder.verify(connectionHandler).renewSlotCache();
+
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
+    inOrder.verify(sleep).accept(anyLong());  // Backing off because of the connection failure
+    inOrder.verify(connectionHandler).renewSlotCache();
+
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
+    inOrder.verify(sleep).accept(anyLong());  // Backing off because of the connection failure
+    inOrder.verify(connectionHandler).renewSlotCache();
+
     inOrder.verifyNoMoreInteractions();
   }
 
@@ -322,7 +338,7 @@ public class JedisClusterCommandTest {
 
     assertEquals("Success!", testMe.run(""));
     InOrder inOrder = inOrder(connectionHandler);
-    inOrder.verify(connectionHandler, times(2)).getConnectionFromSlot(anyInt());
+    inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
     inOrder.verify(connectionHandler).renewSlotCache();
     inOrder.verify(connectionHandler).getConnectionFromSlot(anyInt());
     inOrder.verifyNoMoreInteractions();
